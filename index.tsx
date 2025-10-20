@@ -5,10 +5,52 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import {GoogleGenAI} from '@google/genai';
+import {initializeApp} from 'firebase/app';
+// FIX: Use the standard 'firebase/auth' entry point which is correctly
+// defined in the importmap in index.html.
+// FIX: Switched to named imports for firebase/auth to align with Firebase v9+ modular SDK.
+import {
+  getAuth,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  type Auth,
+  type User,
+} from 'firebase/auth';
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  Firestore,
+} from 'firebase/firestore';
 
-// --- Firebase functionality has been removed due to environment limitations ---
-// This simplifies the app and resolves the persistent `auth/unauthorized-domain` error.
-// The app will now use localStorage for history persistence.
+// --- Firebase Configuration and Initialization ---
+// FIX: Hardcode Firebase config as process.env is not available on GitHub Pages.
+const firebaseConfig = {
+  apiKey: "AIzaSyABU-AlOCIc_Xuz-wmnn-WnmQ8JvuNNLMA",
+  authDomain: "product-scene-generator-79219.firebaseapp.com",
+  projectId: "product-scene-generator-79219",
+  storageBucket: "product-scene-generator-79219.firebasestorage.app",
+  messagingSenderId: "827024070535",
+  appId: "1:827024070535:web:cec35b042c945e4d9a2522",
+};
+
+
+let auth: Auth | null = null;
+let db: Firestore | null = null;
+let currentUser: User | null = null;
+
+if (firebaseConfig.apiKey) {
+  try {
+    const app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } catch (e) {
+    console.error('Firebase initialization failed:', e);
+  }
+}
 
 // Define the aistudio property on the window object for TypeScript
 declare global {
@@ -108,6 +150,15 @@ const feedbackYesButton = document.querySelector(
 const feedbackNoButton = document.querySelector(
   '#feedback-no',
 ) as HTMLButtonElement;
+const loginButton = document.querySelector('#login-button') as HTMLButtonElement;
+const logoutButton = document.querySelector(
+  '#logout-button',
+) as HTMLButtonElement;
+const userProfileEl = document.querySelector(
+  '#user-profile',
+) as HTMLDivElement;
+const userAvatarEl = document.querySelector('#user-avatar') as HTMLImageElement;
+const userNameEl = document.querySelector('#user-name') as HTMLSpanElement;
 
 // --- State Variables ---
 let uploadedImageBase64: string | null = null;
@@ -123,6 +174,9 @@ let allowCreativeAdjustments = false;
 let isCorrectionMode = false;
 let lastGeneratedUrl: string | null = null;
 let lastGeneratedMediaType: 'image' | 'video' | null = null;
+// This will be populated by the banner's React component for use in native functions
+let apiKey: string | null = null;
+
 
 // --- Constants ---
 const LOADING_QUOTES_IMAGE = [
@@ -153,8 +207,6 @@ const PERSONA_PROMPTS: {[key: string]: string} = {
   videographer: `You are an expert Commercial Director and Videographer. Your goal is to conceptualize three short, dynamic, and visually compelling video clips (5-7 seconds each) that showcase the product in action. The scenes should be perfect for high-energy social media ads (like TikTok or Instagram Reels) or as engaging B-roll for a product commercial. Focus on movement, storytelling, and demonstrating the product's primary value proposition in a cinematic way. Your prompts should describe camera movements (e.g., "slow push-in," "dynamic orbiting shot"), action, and the overall mood.`,
 };
 
-const LOCAL_STORAGE_KEY = 'identifiedProducts';
-
 // --- Functions ---
 
 /**
@@ -175,35 +227,37 @@ async function generateImageHash(base64String: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function getProductHistory(): Promise<{[key: string]: string}> {
+async function getProductHistory(imageHash: string): Promise<string | null> {
+  if (!db || !currentUser || !imageHash) return null;
   try {
-    const records = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return records ? JSON.parse(records) : {};
+    const docRef = doc(db, 'users', currentUser.uid, 'history', imageHash);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data().description;
+    }
+    return null;
   } catch (e) {
-    console.error('Failed to parse product history from localStorage', e);
-    return {};
+    console.error('Error fetching product history from Firestore:', e);
+    return null;
   }
 }
 
 async function saveProductCorrection(imageHash: string, description: string) {
-  if (!imageHash || !description) return;
-
-  const history = (await getProductHistory()) as {[key: string]: string};
-  history[imageHash] = description;
+  if (!db || !currentUser || !imageHash || !description) return;
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(history));
+    const docRef = doc(db, 'users', currentUser.uid, 'history', imageHash);
+    await setDoc(docRef, {description}, {merge: true});
   } catch (e) {
-    console.error('Failed to save product correction to localStorage', e);
-    showStatusError('无法保存更正，存储空间可能已满。');
+    console.error('Error saving product correction to Firestore:', e);
+    showStatusError('无法保存更正到云端。');
   }
 }
 
 async function checkProductHistory(imageHash: string) {
-  if (!imageHash) return;
-  const history = await getProductHistory();
-  if (history[imageHash]) {
-    productDescriptionInput.value = history[imageHash];
-    productDescription = history[imageHash];
+  const description = await getProductHistory(imageHash);
+  if (description) {
+    productDescriptionInput.value = description;
+    productDescription = description;
     statusEl.innerText = '已从历史记录中加载产品描述。';
   }
 }
@@ -535,7 +589,9 @@ function handleFile(file: File) {
       imagePreview.src = result;
       uploadedImageBase64 = result.split(',')[1];
       uploadedImageHash = await generateImageHash(uploadedImageBase64);
-      await checkProductHistory(uploadedImageHash);
+      if (currentUser && uploadedImageHash) {
+        await checkProductHistory(uploadedImageHash);
+      }
       promptEl.value = '';
       promptEl.placeholder = '请先分析图片或选择下方场景';
       generateButton.disabled = true;
@@ -567,9 +623,9 @@ function handleFile(file: File) {
 }
 
 async function handleAnalyzeClick() {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    showStatusError('API 密钥未配置。请选择您的 API 密钥。');
+  const currentApiKey = (window as any).API_KEY;
+  if (!currentApiKey) {
+    showStatusError('API 密钥未配置。请通过下方横幅选择您的 API 密钥。');
     await openApiKeyDialog();
     return;
   }
@@ -596,7 +652,7 @@ async function handleAnalyzeClick() {
     const {description, scenarios, recommended_camera} =
       await generateScenarios(
         uploadedImageBase64,
-        apiKey,
+        currentApiKey,
         productDescription,
         selectedPersona,
         allowCreativeAdjustments,
@@ -606,8 +662,12 @@ async function handleAnalyzeClick() {
     recommendedCamera = recommended_camera;
     renderScenarios(scenarios);
     analysisTextEl.textContent = description.chinese;
-    feedbackContainer.classList.remove('hidden');
-    statusEl.innerText = '分析完成。请确认 AI 分析结果是否准确。';
+    if (currentUser) {
+      feedbackContainer.classList.remove('hidden');
+      statusEl.innerText = '分析完成。请确认 AI 分析结果是否准确。';
+    } else {
+      statusEl.innerText = '分析完成。';
+    }
     promptEl.placeholder = '选择以上场景或输入您自己的提示词...';
   } catch (e) {
     console.error('Scenario generation failed:', e);
@@ -645,9 +705,9 @@ async function generate(promptOverride?: string) {
     }
   }
 
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    showStatusError('API 密钥未配置。请选择您的 API 密钥。');
+  const currentApiKey = (window as any).API_KEY;
+  if (!currentApiKey) {
+    showStatusError('API 密钥未配置。请通过下方横幅选择您的 API 密钥。');
     await openApiKeyDialog();
     return;
   }
@@ -685,7 +745,7 @@ async function generate(promptOverride?: string) {
     }, 500);
   }, isVideo ? 5000 : 3000);
   try {
-    await generateMedia(finalPrompt, apiKey, selectedPersona);
+    await generateMedia(finalPrompt, currentApiKey, selectedPersona);
     if (lastGeneratedMediaType === 'video') {
       outputVideo.style.display = 'block';
     } else {
@@ -728,6 +788,50 @@ async function generate(promptOverride?: string) {
       clearInterval(quoteInterval);
       quoteInterval = null;
     }
+  }
+}
+
+// --- Firebase Auth Functions ---
+async function handleLogin() {
+  if (!auth) {
+    showStatusError('Firebase Auth 未初始化。');
+    return;
+  }
+  const provider = new GoogleAuthProvider();
+  try {
+    // FIX: Revert to signInWithPopup as it's more reliable in cross-origin
+    // contexts like GitHub Pages, avoiding complex redirect issues.
+    await signInWithPopup(auth, provider);
+  } catch (error) {
+    console.error('Google Sign-In Error:', error);
+    showStatusError(`登录失败：${(error as Error).message}`);
+  }
+}
+
+async function handleLogout() {
+  if (!auth) return;
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error('Logout Error:', error);
+    showStatusError('登出失败。');
+  }
+}
+
+function updateUserUI(user: User | null) {
+  currentUser = user;
+  if (user) {
+    loginButton.classList.add('hidden');
+    userProfileEl.classList.remove('hidden');
+    userProfileEl.classList.add('flex');
+    userAvatarEl.src = user.photoURL || '';
+    userNameEl.textContent = user.displayName || '用户';
+    statusEl.innerText = '已登录，历史记录将同步到云端。';
+  } else {
+    loginButton.classList.remove('hidden');
+    userProfileEl.classList.add('hidden');
+    userProfileEl.classList.remove('flex');
+    statusEl.innerText = '请上传图片以开始。';
   }
 }
 
@@ -884,3 +988,18 @@ feedbackNoButton.addEventListener('click', () => {
   }
   feedbackContainer.classList.add('hidden');
 });
+
+// --- Auth Event Listeners ---
+if (auth) {
+  // FIX: Remove getRedirectResult as we are now using signInWithPopup.
+  // The onAuthStateChanged listener is sufficient for handling login state.
+  loginButton.addEventListener('click', handleLogin);
+  logoutButton.addEventListener('click', handleLogout);
+  onAuthStateChanged(auth, user => {
+    updateUserUI(user);
+    // If the user logs in and has an image uploaded, check history
+    if (user && uploadedImageHash) {
+      checkProductHistory(uploadedImageHash);
+    }
+  });
+}
