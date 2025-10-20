@@ -6,28 +6,25 @@
  */
 import {GoogleGenAI} from '@google/genai';
 import {initializeApp} from 'firebase/app';
-// FIX: Use the standard 'firebase/auth' entry point which is correctly
-// defined in the importmap in index.html.
-// FIX: Switched to named imports for firebase/auth to align with Firebase v9+ modular SDK.
-import {
-  getAuth,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signInWithPopup,
-  signOut,
-  type Auth,
-  type User,
-} from 'firebase/auth';
+// Fix: Use Firebase v8 compat imports for auth to resolve module errors.
+// The errors indicate that the v9 modular API for authentication is not found,
+// suggesting a version mismatch or configuration issue in the project's environment.
+// Using the compat library for auth while keeping Firestore on v9 modular is a supported pattern.
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
 import {
   getFirestore,
   doc,
   getDoc,
   setDoc,
-  Firestore,
+  type Firestore,
 } from 'firebase/firestore';
 
-// --- Firebase Configuration and Initialization ---
-// FIX: Hardcode Firebase config as process.env is not available on GitHub Pages.
+// Fix: Define types for Firebase v8 compat API to match the new implementation.
+type Auth = firebase.auth.Auth;
+type User = firebase.User;
+
+// --- Firebase Configuration ---
 const firebaseConfig = {
   apiKey: "AIzaSyABU-AlOCIc_Xuz-wmnn-WnmQ8JvuNNLMA",
   authDomain: "product-scene-generator-79219.firebaseapp.com",
@@ -37,21 +34,6 @@ const firebaseConfig = {
   appId: "1:827024070535:web:cec35b042c945e4d9a2522",
 };
 
-
-let auth: Auth | null = null;
-let db: Firestore | null = null;
-let currentUser: User | null = null;
-
-if (firebaseConfig.apiKey) {
-  try {
-    const app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-  } catch (e) {
-    console.error('Firebase initialization failed:', e);
-  }
-}
-
 // Define the aistudio property on the window object for TypeScript
 declare global {
   interface AIStudio {
@@ -60,17 +42,6 @@ declare global {
   }
   interface Window {
     aistudio?: AIStudio;
-  }
-}
-
-async function openApiKeyDialog() {
-  if (window.aistudio?.openSelectKey) {
-    await window.aistudio.openSelectKey();
-  } else {
-    // This provides a fallback for environments where the dialog isn't available
-    showStatusError(
-      'API 密钥选择不可用。请配置 API_KEY 环境变量。',
-    );
   }
 }
 
@@ -174,8 +145,7 @@ let allowCreativeAdjustments = false;
 let isCorrectionMode = false;
 let lastGeneratedUrl: string | null = null;
 let lastGeneratedMediaType: 'image' | 'video' | null = null;
-// This will be populated by the banner's React component for use in native functions
-let apiKey: string | null = null;
+let currentUser: User | null = null;
 
 
 // --- Constants ---
@@ -207,7 +177,21 @@ const PERSONA_PROMPTS: {[key: string]: string} = {
   videographer: `You are an expert Commercial Director and Videographer. Your goal is to conceptualize three short, dynamic, and visually compelling video clips (5-7 seconds each) that showcase the product in action. The scenes should be perfect for high-energy social media ads (like TikTok or Instagram Reels) or as engaging B-roll for a product commercial. Focus on movement, storytelling, and demonstrating the product's primary value proposition in a cinematic way. Your prompts should describe camera movements (e.g., "slow push-in," "dynamic orbiting shot"), action, and the overall mood.`,
 };
 
-// --- Functions ---
+// --- Helper Functions ---
+
+function showStatusError(message: string) {
+  statusEl.innerHTML = `<span class="text-red-400">${message}</span>`;
+}
+
+async function openApiKeyDialog() {
+  if (window.aistudio?.openSelectKey) {
+    await window.aistudio.openSelectKey();
+  } else {
+    showStatusError(
+      'API 密钥选择不可用。请配置 API_KEY 环境变量。',
+    );
+  }
+}
 
 /**
  * Generates a SHA-256 hash for a given base64 string.
@@ -227,44 +211,6 @@ async function generateImageHash(base64String: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function getProductHistory(imageHash: string): Promise<string | null> {
-  if (!db || !currentUser || !imageHash) return null;
-  try {
-    const docRef = doc(db, 'users', currentUser.uid, 'history', imageHash);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return docSnap.data().description;
-    }
-    return null;
-  } catch (e) {
-    console.error('Error fetching product history from Firestore:', e);
-    return null;
-  }
-}
-
-async function saveProductCorrection(imageHash: string, description: string) {
-  if (!db || !currentUser || !imageHash || !description) return;
-  try {
-    const docRef = doc(db, 'users', currentUser.uid, 'history', imageHash);
-    await setDoc(docRef, {description}, {merge: true});
-  } catch (e) {
-    console.error('Error saving product correction to Firestore:', e);
-    showStatusError('无法保存更正到云端。');
-  }
-}
-
-async function checkProductHistory(imageHash: string) {
-  const description = await getProductHistory(imageHash);
-  if (description) {
-    productDescriptionInput.value = description;
-    productDescription = description;
-    statusEl.innerText = '已从历史记录中加载产品描述。';
-  }
-}
-
-function showStatusError(message: string) {
-  statusEl.innerHTML = `<span class="text-red-400">${message}</span>`;
-}
 
 function setControlsDisabled(disabled: boolean) {
   generateButton.disabled = disabled;
@@ -291,6 +237,111 @@ function setControlsDisabled(disabled: boolean) {
     adjustmentToggle.disabled = !hasImage;
   }
 }
+
+// --- Firebase Initialization and Functions ---
+
+// Fix: Switched to a mixed v9/compat Firebase initialization.
+// This uses the v9 modular API for Firestore and the v8 compat API for Authentication
+// to resolve the module import errors.
+function initializeFirebase(): { auth: Auth | null; db: Firestore | null } {
+    if (!firebaseConfig.apiKey) {
+        console.error("Firebase config is missing.");
+        return { auth: null, db: null };
+    }
+    try {
+        // Initialize v9 for modular services like Firestore
+        const app = initializeApp(firebaseConfig);
+        // Initialize v8 compat for services like Auth
+        if (firebase.apps.length === 0) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        const auth = firebase.auth();
+        const db = getFirestore(app);
+        return { auth, db };
+    } catch (e) {
+        console.error('Firebase initialization failed:', e);
+        return { auth: null, db: null };
+    }
+}
+
+const { auth, db } = initializeFirebase();
+
+async function getProductHistory(db: Firestore, user: User, imageHash: string): Promise<string | null> {
+  if (!imageHash) return null;
+  try {
+    const docRef = doc(db, 'users', user.uid, 'history', imageHash);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data().description;
+    }
+    return null;
+  } catch (e) {
+    console.error('Error fetching product history from Firestore:', e);
+    return null;
+  }
+}
+
+async function saveProductCorrection(db: Firestore, user: User, imageHash: string, description: string) {
+  if (!imageHash || !description) return;
+  try {
+    const docRef = doc(db, 'users', user.uid, 'history', imageHash);
+    await setDoc(docRef, {description}, {merge: true});
+  } catch (e) {
+    console.error('Error saving product correction to Firestore:', e);
+    showStatusError('无法保存更正到云端。');
+  }
+}
+
+async function checkProductHistory(imageHash: string) {
+  if (!db || !currentUser) return;
+  const description = await getProductHistory(db, currentUser, imageHash);
+  if (description) {
+    productDescriptionInput.value = description;
+    productDescription = description;
+    statusEl.innerText = '已从历史记录中加载产品描述。';
+  }
+}
+
+// Fix: Updated to use Firebase v8 compat API for authentication.
+async function handleLogin(authInstance: Auth) {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  try {
+    await authInstance.signInWithPopup(provider);
+  } catch (error) {
+    console.error('Google Sign-In Error:', error);
+    showStatusError(`登录失败：${(error as Error).message}`);
+  }
+}
+
+// Fix: Updated to use Firebase v8 compat API for authentication.
+async function handleLogout(authInstance: Auth) {
+  try {
+    await authInstance.signOut();
+  } catch (error) {
+    console.error('Logout Error:', error);
+    showStatusError('登出失败。');
+  }
+}
+
+function updateUserUI(user: User | null) {
+  currentUser = user;
+  if (user) {
+    loginButton.classList.add('hidden');
+    userProfileEl.classList.remove('hidden');
+    userProfileEl.classList.add('flex');
+    userAvatarEl.src = user.photoURL || '';
+    userNameEl.textContent = user.displayName || '用户';
+    statusEl.innerText = '已登录，历史记录将同步到云端。';
+  } else {
+    loginButton.classList.remove('hidden');
+    userProfileEl.classList.add('hidden');
+    userProfileEl.classList.remove('flex');
+    statusEl.innerText = '请上传图片以开始。';
+  }
+}
+
+
+// --- Core Application Logic ---
 
 async function generateMedia(
   prompt: string,
@@ -444,6 +495,8 @@ Example JSON structure:
     },
   });
 
+  // Fix: Corrected the call to access the model's response text.
+  // `response.text` is a 'get' accessor property, not a function, according to the @google/genai SDK guidelines.
   let jsonString = response.text.trim();
   const jsonMatch = jsonString.match(/```(json)?([\s\S]*?)```/);
   if (jsonMatch && jsonMatch[2]) {
@@ -634,8 +687,10 @@ async function handleAnalyzeClick() {
     return;
   }
   if (isCorrectionMode) {
-    if (uploadedImageHash) {
+    if (uploadedImageHash && db && currentUser) {
       await saveProductCorrection(
+        db,
+        currentUser,
         uploadedImageHash,
         productDescriptionInput.value,
       );
@@ -791,215 +846,177 @@ async function generate(promptOverride?: string) {
   }
 }
 
-// --- Firebase Auth Functions ---
-async function handleLogin() {
-  if (!auth) {
-    showStatusError('Firebase Auth 未初始化。');
-    return;
-  }
-  const provider = new GoogleAuthProvider();
-  try {
-    // FIX: Revert to signInWithPopup as it's more reliable in cross-origin
-    // contexts like GitHub Pages, avoiding complex redirect issues.
-    await signInWithPopup(auth, provider);
-  } catch (error) {
-    console.error('Google Sign-In Error:', error);
-    showStatusError(`登录失败：${(error as Error).message}`);
-  }
-}
-
-async function handleLogout() {
-  if (!auth) return;
-  try {
-    await signOut(auth);
-  } catch (error) {
-    console.error('Logout Error:', error);
-    showStatusError('登出失败。');
-  }
-}
-
-function updateUserUI(user: User | null) {
-  currentUser = user;
-  if (user) {
-    loginButton.classList.add('hidden');
-    userProfileEl.classList.remove('hidden');
-    userProfileEl.classList.add('flex');
-    userAvatarEl.src = user.photoURL || '';
-    userNameEl.textContent = user.displayName || '用户';
-    statusEl.innerText = '已登录，历史记录将同步到云端。';
-  } else {
-    loginButton.classList.remove('hidden');
-    userProfileEl.classList.add('hidden');
-    userProfileEl.classList.remove('flex');
-    statusEl.innerText = '请上传图片以开始。';
-  }
-}
-
-// --- Event Listeners ---
-promptEl.addEventListener('input', () => {
-  generateButton.disabled = !promptEl.value.trim();
-});
-
-generateButton.addEventListener('click', () => generate());
-
-fileInput.addEventListener('change', () => {
-  if (fileInput.files && fileInput.files.length > 0) {
-    handleFile(fileInput.files[0]);
-  }
-});
-
-['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-  uploadContainer.addEventListener(eventName, e => {
-    e.preventDefault();
-    e.stopPropagation();
-  });
-});
-
-['dragenter', 'dragover'].forEach(eventName => {
-  uploadContainer.addEventListener(eventName, () => {
-    uploadContainer.classList.add('border-blue-500');
-  });
-});
-
-['dragleave', 'drop'].forEach(eventName => {
-  uploadContainer.addEventListener(eventName, () => {
-    uploadContainer.classList.remove('border-blue-500');
-  });
-});
-
-uploadContainer.addEventListener('drop', e => {
-  const dt = e.dataTransfer;
-  if (dt?.files?.length) {
-    handleFile(dt.files[0]);
-  }
-});
-
-removeImageButton.addEventListener('click', () => {
-  uploadedImageBase64 = null;
-  uploadedImageHash = null;
-  productDescription = '';
-  productDescriptionInput.value = '';
-  analyzedProductDescription = null;
-  generatedScenarios = [];
-  recommendedCamera = null;
-  fileInput.value = '';
-  imagePreview.src = '';
-  imagePreview.classList.add('hidden');
-  uploadPlaceholder.classList.remove('hidden');
-  removeImageButton.classList.add('hidden');
-  analyzeButton.disabled = true;
-  analyzeButton.innerText = '分析产品并生成场景';
-  isCorrectionMode = false;
-  productDescriptionInput.disabled = true;
-  clearDescriptionButton.disabled = true;
-  regenerateButton.disabled = true;
-  personaCards.forEach(card => (card.disabled = true));
-  adjustmentToggle.disabled = true;
-  adjustmentToggle.checked = false;
-  allowCreativeAdjustments = false;
-  scenariosContainer.style.display = 'none';
-  scenariosList.innerHTML = '';
-  mediaActions.classList.add('hidden');
-  outputImage.style.display = 'none';
-  outputImage.src = '';
-  outputVideo.style.display = 'none';
-  outputVideo.src = '';
-  promptEl.placeholder = '请先上传并分析图片...';
-  feedbackContainer.classList.add('hidden');
-  productDescriptionInput.classList.remove('ring-2', 'ring-yellow-400');
-});
-
-analyzeButton.addEventListener('click', handleAnalyzeClick);
-regenerateButton.addEventListener('click', handleAnalyzeClick);
-
-downloadButton.addEventListener('click', () => {
-  if (!lastGeneratedUrl) return;
-  const link = document.createElement('a');
-  link.href = lastGeneratedUrl;
-  const extension = lastGeneratedMediaType === 'video' ? 'mp4' : 'jpg';
-  link.download = `generated-${lastGeneratedMediaType}-${Date.now()}.${extension}`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-});
-
-regenerateMediaButton.addEventListener('click', () => {
-  if (lastUsedPrompt !== null) {
-    generate(lastUsedPrompt);
-  }
-});
-
-productDescriptionInput.addEventListener('input', () => {
-  productDescription = productDescriptionInput.value;
-});
-
-clearDescriptionButton.addEventListener('click', () => {
-  productDescription = '';
-  productDescriptionInput.value = '';
-});
-
-clearPromptButton.addEventListener('click', () => {
-  promptEl.value = '';
-  generateButton.disabled = true;
-});
-
-personaCards.forEach(card => {
-  card.addEventListener('click', () => {
-    if (card.disabled) return;
-    selectedPersona = card.dataset.persona || 'ecommerce';
-    personaCards.forEach(c => {
-      c.classList.remove('selected');
-      c.setAttribute('aria-pressed', 'false');
+// --- Event Listeners Setup ---
+function setupEventListeners() {
+    promptEl.addEventListener('input', () => {
+        generateButton.disabled = !promptEl.value.trim();
     });
-    card.classList.add('selected');
-    card.setAttribute('aria-pressed', 'true');
 
-    if (promptEl.value) {
-       if (selectedPersona === 'videographer') {
-        generateButton.innerText = '生成视频';
-      } else {
-        generateButton.innerText = '生成图片';
-      }
+    generateButton.addEventListener('click', () => generate());
+
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files && fileInput.files.length > 0) {
+            handleFile(fileInput.files[0]);
+        }
+    });
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        uploadContainer.addEventListener(eventName, e => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        uploadContainer.addEventListener(eventName, () => {
+            uploadContainer.classList.add('border-blue-500');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        uploadContainer.addEventListener(eventName, () => {
+            uploadContainer.classList.remove('border-blue-500');
+        });
+    });
+
+    uploadContainer.addEventListener('drop', e => {
+        const dt = e.dataTransfer;
+        if (dt?.files?.length) {
+            handleFile(dt.files[0]);
+        }
+    });
+
+    removeImageButton.addEventListener('click', () => {
+        uploadedImageBase64 = null;
+        uploadedImageHash = null;
+        productDescription = '';
+        productDescriptionInput.value = '';
+        analyzedProductDescription = null;
+        generatedScenarios = [];
+        recommendedCamera = null;
+        fileInput.value = '';
+        imagePreview.src = '';
+        imagePreview.classList.add('hidden');
+        uploadPlaceholder.classList.remove('hidden');
+        removeImageButton.classList.add('hidden');
+        analyzeButton.disabled = true;
+        analyzeButton.innerText = '分析产品并生成场景';
+        isCorrectionMode = false;
+        productDescriptionInput.disabled = true;
+        clearDescriptionButton.disabled = true;
+        regenerateButton.disabled = true;
+        personaCards.forEach(card => (card.disabled = true));
+        adjustmentToggle.disabled = true;
+        adjustmentToggle.checked = false;
+        allowCreativeAdjustments = false;
+        scenariosContainer.style.display = 'none';
+        scenariosList.innerHTML = '';
+        mediaActions.classList.add('hidden');
+        outputImage.style.display = 'none';
+        outputImage.src = '';
+        outputVideo.style.display = 'none';
+        outputVideo.src = '';
+        promptEl.placeholder = '请先上传并分析图片...';
+        feedbackContainer.classList.add('hidden');
+        productDescriptionInput.classList.remove('ring-2', 'ring-yellow-400');
+    });
+
+    analyzeButton.addEventListener('click', handleAnalyzeClick);
+    regenerateButton.addEventListener('click', handleAnalyzeClick);
+
+    downloadButton.addEventListener('click', () => {
+        if (!lastGeneratedUrl) return;
+        const link = document.createElement('a');
+        link.href = lastGeneratedUrl;
+        const extension = lastGeneratedMediaType === 'video' ? 'mp4' : 'jpg';
+        link.download = `generated-${lastGeneratedMediaType}-${Date.now()}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
+    regenerateMediaButton.addEventListener('click', () => {
+        if (lastUsedPrompt !== null) {
+            generate(lastUsedPrompt);
+        }
+    });
+
+    productDescriptionInput.addEventListener('input', () => {
+        productDescription = productDescriptionInput.value;
+    });
+
+    clearDescriptionButton.addEventListener('click', () => {
+        productDescription = '';
+        productDescriptionInput.value = '';
+    });
+
+    clearPromptButton.addEventListener('click', () => {
+        promptEl.value = '';
+        generateButton.disabled = true;
+    });
+
+    personaCards.forEach(card => {
+        card.addEventListener('click', () => {
+            if (card.disabled) return;
+            selectedPersona = card.dataset.persona || 'ecommerce';
+            personaCards.forEach(c => {
+                c.classList.remove('selected');
+                c.setAttribute('aria-pressed', 'false');
+            });
+            card.classList.add('selected');
+            card.setAttribute('aria-pressed', 'true');
+
+            if (promptEl.value) {
+               if (selectedPersona === 'videographer') {
+                generateButton.innerText = '生成视频';
+              } else {
+                generateButton.innerText = '生成图片';
+              }
+            }
+        });
+    });
+
+    adjustmentToggle.addEventListener('change', () => {
+        allowCreativeAdjustments = adjustmentToggle.checked;
+    });
+
+    feedbackYesButton.addEventListener('click', async () => {
+        if (analyzedProductDescription && uploadedImageHash && db && currentUser) {
+            await saveProductCorrection(db, currentUser, uploadedImageHash, analyzedProductDescription);
+            statusEl.innerText = '分析已确认并保存到历史记录。';
+        }
+        feedbackContainer.classList.add('hidden');
+    });
+
+    feedbackNoButton.addEventListener('click', () => {
+        if (analyzedProductDescription) {
+            isCorrectionMode = true;
+            productDescriptionInput.value = analyzedProductDescription;
+            productDescription = analyzedProductDescription;
+            analyzeButton.innerText = '使用更正重新生成';
+            statusEl.innerText = '请在上方第二步中更正产品描述，然后重新生成。';
+            productDescriptionInput.classList.add('ring-2', 'ring-yellow-400');
+            productDescriptionInput.focus();
+        }
+        feedbackContainer.classList.add('hidden');
+    });
+
+    // --- Auth Event Listeners ---
+    if (auth) {
+        loginButton.addEventListener('click', () => handleLogin(auth));
+        logoutButton.addEventListener('click', () => handleLogout(auth));
+        // Fix: Updated to use Firebase v8 compat API for authentication.
+        auth.onAuthStateChanged(user => {
+            updateUserUI(user);
+            if (user && uploadedImageHash) {
+                checkProductHistory(uploadedImageHash);
+            }
+        });
+    } else {
+        loginButton.style.display = 'none';
+        showStatusError("无法初始化登录服务。");
     }
-  });
-});
-
-adjustmentToggle.addEventListener('change', () => {
-  allowCreativeAdjustments = adjustmentToggle.checked;
-});
-
-feedbackYesButton.addEventListener('click', async () => {
-  if (analyzedProductDescription && uploadedImageHash) {
-    await saveProductCorrection(uploadedImageHash, analyzedProductDescription);
-    statusEl.innerText = '分析已确认并保存到历史记录。';
-  }
-  feedbackContainer.classList.add('hidden');
-});
-
-feedbackNoButton.addEventListener('click', () => {
-  if (analyzedProductDescription) {
-    isCorrectionMode = true;
-    productDescriptionInput.value = analyzedProductDescription;
-    productDescription = analyzedProductDescription;
-    analyzeButton.innerText = '使用更正重新生成';
-    statusEl.innerText = '请在上方第二步中更正产品描述，然后重新生成。';
-    productDescriptionInput.classList.add('ring-2', 'ring-yellow-400');
-    productDescriptionInput.focus();
-  }
-  feedbackContainer.classList.add('hidden');
-});
-
-// --- Auth Event Listeners ---
-if (auth) {
-  // FIX: Remove getRedirectResult as we are now using signInWithPopup.
-  // The onAuthStateChanged listener is sufficient for handling login state.
-  loginButton.addEventListener('click', handleLogin);
-  logoutButton.addEventListener('click', handleLogout);
-  onAuthStateChanged(auth, user => {
-    updateUserUI(user);
-    // If the user logs in and has an image uploaded, check history
-    if (user && uploadedImageHash) {
-      checkProductHistory(uploadedImageHash);
-    }
-  });
 }
+
+// --- App Initialization ---
+document.addEventListener('DOMContentLoaded', setupEventListeners);
