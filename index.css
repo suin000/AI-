@@ -1,0 +1,283 @@
+:root {
+  --font-body: 'Inter', sans-serif;
+  --font-special: 'Permanent Marker', cursive;
+  --yellow-primary: #facc15;
+  --yellow-secondary: #fde047;
+  --text-neutral-200: #e5e7eb;
+  --text-neutral-400: #9ca3af;
+  --text-neutral-500: #6b7280;
+  --text-neutral-700: #374151;
+}
+
+/* --- Banner --- */
+.app-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  padding: 0.75rem;
+  z-index: 50;
+  color: var(--text-neutral-400);
+  font-size: 0.875rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--font-body);
+}
+
+.app-banner-content {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 0.8fr auto 1.2fr;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 1rem;
+}
+
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: var(--text-neutral-500);
+  white-space: nowrap;
+  justify-self: start;
+}
+
+.banner-right {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2.5rem;
+  justify-self: end;
+}
+
+.remix-ideas {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-neutral-400);
+  text-align: right;
+  min-width: 0;
+  justify-self: center;
+}
+
+.remix-prompt {
+  flex-shrink: 0;
+}
+
+.remix-text-container {
+  position: relative;
+  width: 16rem;
+  height: 1.25rem;
+  overflow: hidden;
+}
+
+.remix-text {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font-weight: 500;
+  color: var(--text-neutral-200);
+  white-space: nowrap;
+  text-align: left;
+}
+
+.banner-buttons {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.banner-button {
+  font-family: var(--font-special);
+  font-size: 1rem;
+  text-align: center;
+  padding: 0.5rem 1rem;
+  border-radius: 2px;
+  transition: transform 0.2s, background-color 0.2s, color 0.2s;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: var(--text-neutral-400);
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.close-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-neutral-200);
+}
+
+.button-ai-studio {
+  color: black;
+  background-color: var(--yellow-primary);
+  box-shadow: 1px 1px 0px 1px rgba(0,0,0,0.2);
+}
+
+.button-ai-studio:hover {
+  transform: scale(1.05) rotate(-2deg);
+  background-color: var(--yellow-secondary);
+}
+
+.button-gemini-chat {
+  color: white;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.button-gemini-chat:hover {
+  transform: scale(1.05) rotate(2deg);
+  background-color: white;
+  color: black;
+}
+
+@media (max-width: 1024px) {
+  .app-banner-content {
+    grid-template-columns: 1fr 1fr;
+  }
+  .remix-ideas {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .banner-left { display: none; }
+  .app-banner-content {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .banner-right {
+    justify-content: center;
+    justify-self: center;
+  }
+}
+
+@media (max-width: 500px) {
+    .banner-buttons {
+        gap: 0.75rem;
+    }
+    .banner-button {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.8rem;
+    }
+}
+
+/* Styles for the scenario textareas */
+.scenario-textarea {
+  background-color: #2a2b2e;
+  border: 1px solid #4a4c4f;
+  border-radius: 6px;
+  padding: 0.5rem;
+  color: #d1d5db; /* gray-300 */
+  font-family: inherit;
+  font-size: 0.875rem; /* 14px */
+  resize: none;
+  width: 100%;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.scenario-textarea:focus {
+  outline: none;
+  border-color: #6366f1; /* indigo-500 */
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5), 0 0 0 2px rgba(99, 102, 241, 0.4);
+}
+
+/* Custom scrollbar for scenario textareas */
+.scenario-textarea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scenario-textarea::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.scenario-textarea::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 3px;
+}
+
+.scenario-textarea::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+/* For Firefox */
+.scenario-textarea {
+  scrollbar-width: thin;
+  scrollbar-color: #555 transparent;
+}
+
+/* Progress Bar Animation */
+.progress-bar-inner {
+  background: linear-gradient(90deg, #4f46e5, #3b82f6, #6366f1, #4f46e5); /* Indigo-600 to Blue-500 to Indigo-500 */
+  background-size: 200% 100%;
+  animation: progress-animation 2s linear infinite;
+}
+
+@keyframes progress-animation {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Persona Card Styles */
+.persona-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: #353739;
+  border: 2px solid #555;
+  border-radius: 0.5rem;
+  color: #a0a0a0;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  text-align: center;
+  min-height: 80px;
+}
+
+.persona-card:hover {
+  border-color: #777;
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.persona-card.selected {
+  border-color: #4f46e5; /* Indigo */
+  background-color: #4338ca; /* Darker Indigo */
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.persona-card:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.persona-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  border-color: #555;
+  background-color: #353739;
+}

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>使用 Imagen 生成图片</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Roboto+Mono&family=Permanent+Marker&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="index.css" />
+    <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.4.0",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "framer-motion": "https://aistudiocdn.com/framer-motion@^11.3.12",
+    "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+    "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
+    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.4.0/"
+  }
+}
+</script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-[#1E1F20] font-['Inter'] text-gray-300 antialiased">
+    <div
+      class="min-h-screen flex items-center justify-center p-4"
+      role="main"
+    >
+      <div
+        class="bg-[#2a2b2e] px-8 pt-8 pb-6 rounded-2xl shadow-2xl w-full max-w-2xl space-y-6"
+      >
+        <div class="text-center">
+          <h1 class="text-3xl font-bold text-white tracking-tight">
+            产品场景生成器
+          </h1>
+          <p class="text-gray-400 mt-2 text-sm">
+            上传产品图片，一键生成创意图片或视频场景。<br />
+            请参阅“代码”选项卡查看示例实现。
+          </p>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Step 1: Upload Image -->
+          <label
+            for="file-input"
+            class="block text-sm font-medium text-gray-300 mb-2"
+            >1. 上传产品图片</label
+          >
+          <div
+            id="upload-container"
+            class="relative flex items-center justify-center w-full h-48 bg-[#353739] border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-gray-500 transition-colors"
+          >
+            <div id="upload-placeholder" class="text-center text-gray-400">
+              <svg
+                class="mx-auto h-12 w-12"
+                stroke="currentColor"
+                fill="none"
+                viewBox="0 0 48 48"
+                aria-hidden="true"
+              >
+                <path
+                  d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></path>
+              </svg>
+              <p class="mt-2">
+                拖拽文件至此或
+                <span class="font-semibold text-blue-400"
+                  >点击上传</span
+                >
+              </p>
+            </div>
+            <img
+              id="image-preview"
+              class="hidden absolute w-full h-full object-contain p-2 rounded-lg"
+              alt="产品预览"
+            />
+            <input
+              type="file"
+              id="file-input"
+              class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              accept="image/*"
+            />
+            <button
+              id="remove-image-button"
+              class="hidden absolute top-2 right-2 p-1 bg-gray-800 rounded-full text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white"
+              aria-label="移除图片"
+            >
+              <svg
+                class="h-5 w-5"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                ></path>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Step 2: Add Details -->
+          <div class="space-y-2">
+            <label
+              for="product-description-input"
+              class="block text-sm font-medium text-gray-300"
+              >2. 添加产品详情 (可选)</label
+            >
+            <div class="relative">
+              <textarea
+                id="product-description-input"
+                rows="3"
+                class="w-full bg-[#353739] border border-gray-600 rounded-lg p-3 pr-8 text-white placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="提供简要描述（例如：“这是一个手工皮夹”），帮助 AI 更好地理解您的产品。"
+                disabled
+              ></textarea>
+              <button id="clear-description-button" title="清除描述" class="absolute top-2.5 right-2.5 p-1 rounded-full text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50" disabled>
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 3: Select Persona -->
+          <div class="space-y-3">
+             <label
+              class="block text-sm font-medium text-gray-300"
+              >3. 选择专家身份</label
+            >
+            <div id="persona-selector" class="grid grid-cols-3 md:grid-cols-7 gap-3">
+                <button data-persona="analyst" class="persona-card selected" aria-pressed="true" title="快速、准确地识别产品核心信息，进行事实性分析。">
+                    <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                    <span class="font-semibold text-xs">全能分析师</span>
+                </button>
+                <button data-persona="comprehensive" class="persona-card" aria-pressed="false" title="综合四大专家视角，生成商业价值、社交传播、艺术美感与设计和谐兼具的顶级场景。">
+                   <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 21.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" /></svg>
+                    <span class="font-semibold text-xs">综合专家</span>
+                </button>
+                <button data-persona="ecommerce" class="persona-card" aria-pressed="false" title="为电商平台和广告创建干净、商业化的产品图片。">
+                    <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c.51 0 .962-.343 1.087-.835l1.823-6.84a1.06 1.06 0 0 0-.44-1.223l-5.334-2.667a1.06 1.06 0 0 0-1.223.44l-1.823 6.841a1.06 1.06 0 0 0 .44 1.223l.003.001M10.5 14.25h6.248a3.75 3.75 0 0 1-7.498 0Z" /></svg>
+                    <span class="font-semibold text-xs">电商商家</span>
+                </button>
+                 <button data-persona="influencer" class="persona-card" aria-pressed="false" title="打造适合社交媒体传播的、有故事性和潮流感的生活方式图片。">
+                    <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.633 10.267a1.5 1.5 0 1 1-3.366 0 1.5 1.5 0 0 1 3.366 0ZM21.75 10.267a1.5 1.5 0 1 1-3.366 0 1.5 1.5 0 0 1 3.366 0ZM16.5 10.267a1.5 1.5 0 1 1-3.366 0 1.5 1.5 0 0 1 3.366 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a8.25 8.25 0 0 0 6.634-12.982 1.5 1.5 0 1 0-2.267-2.032A5.25 5.25 0 0 1 9.75 9.75 1.5 1.5 0 1 0 7.5 7.5a8.25 8.25 0 0 0 4.5 13.5Z" /></svg>
+                    <span class="font-semibold text-xs">网红博主</span>
+                </button>
+                 <button data-persona="photographer" class="persona-card" aria-pressed="false" title="生成具有杂志大片质感的、富有艺术性和氛围感的摄影作品。">
+                    <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.776 48.776 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" /></svg>
+                    <span class="font-semibold text-xs">摄影师</span>
+                </button>
+                <button data-persona="designer" class="persona-card" aria-pressed="false" title="将产品融入和谐、有格调的室内设计场景中。">
+                     <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /></svg>
+                    <span class="font-semibold text-xs">设计师</span>
+                </button>
+                 <button data-persona="videographer" class="persona-card" aria-pressed="false" title="构思动态视频场景，用于广告或社交媒体。需要已启用结算的 API 密钥。">
+                    <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9A2.25 2.25 0 0 0 13.5 5.25h-9A2.25 2.25 0 0 0 2.25 7.5v9A2.25 2.25 0 0 0 4.5 18.75Z" /></svg>
+                    <span class="font-semibold text-xs">摄像师</span>
+                </button>
+            </div>
+          </div>
+
+
+          <!-- Step 4: Analyze -->
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2"
+              >4. 生成创意提示词</label
+            >
+             <div class="flex items-center space-x-3 bg-[#353739] p-3 rounded-lg">
+                <input id="adjustment-toggle" name="adjustment-toggle" type="checkbox" class="h-4 w-4 rounded border-gray-500 bg-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" disabled/>
+                <div class="flex flex-col flex-1">
+                    <label for="adjustment-toggle" class="text-sm font-medium text-gray-200 cursor-pointer">允许创意微调</label>
+                    <p class="text-xs text-gray-400">允许 AI 适当调整产品摆放角度以更好地融入场景。</p>
+                </div>
+            </div>
+          </div>
+          <div class="flex items-center space-x-2 pt-2">
+            <button
+              id="analyze-button"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-400 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              disabled
+            >
+              分析产品并生成场景
+            </button>
+          </div>
+
+          <!-- Scenarios -->
+          <div id="scenarios-container" class="hidden space-y-3 pt-4">
+            <div class="flex justify-between items-center">
+              <h2 class="text-lg font-semibold text-white">选择一个场景</h2>
+              <button
+                id="regenerate-button"
+                title="重新生成场景"
+                class="flex items-center justify-center p-2 text-sm text-gray-400 hover:text-white rounded-full hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled
+              >
+                <svg
+                  class="h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 4v5h5M20 20v-5h-5M4 4l1.5 1.5A9 9 0 0120.5 15M20 20l-1.5-1.5A9 9 0 003.5 9"
+                  ></path>
+                </svg>
+              </button>
+            </div>
+            <!-- Feedback section -->
+            <div id="feedback-container" class="hidden bg-[#353739] p-4 rounded-lg space-y-3">
+                <div>
+                    <strong class="text-sm text-gray-200">AI 分析结果：</strong>
+                    <p id="analysis-text" class="text-sm text-gray-400 mt-1"></p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <p class="text-sm font-medium text-white">此分析是否正确？</p>
+                    <div class="flex items-center space-x-2">
+                        <button id="feedback-yes" class="px-3 py-1 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors">是 👍</button>
+                        <button id="feedback-no" class="px-3 py-1 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors">否 👎</button>
+                    </div>
+                </div>
+            </div>
+            <div id="scenarios-list" class="space-y-2">
+              <!-- Scenarios injected here -->
+            </div>
+          </div>
+
+          <!-- Step 5: Final Prompt & Generation -->
+          <div class="space-y-2">
+            <label
+              for="prompt-input"
+              class="block text-sm font-medium text-gray-300"
+              >5. 生成您的作品</label
+            >
+             <div class="relative">
+              <textarea
+                id="prompt-input"
+                rows="4"
+                class="w-full bg-[#353739] border border-gray-600 rounded-lg p-4 pr-10 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow duration-200 resize-none"
+                placeholder="请先上传并分析图片..."
+                aria-label="作品生成提示词"
+              ></textarea>
+               <button id="clear-prompt-button" title="清除提示词" class="absolute top-3 right-3 p-1 rounded-full text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button
+          id="generate-button"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-400 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+          disabled
+        >
+          生成作品
+        </button>
+
+        <div class="w-full pt-6">
+          <div id="output-container" class="relative">
+            <div
+              id="loading-indicator"
+              class="hidden flex flex-col justify-center items-center py-16 space-y-4"
+            >
+              <div
+                class="w-full max-w-xs bg-gray-700 rounded-full h-2.5 overflow-hidden"
+              >
+                <div class="progress-bar-inner h-2.5 rounded-full"></div>
+              </div>
+              <p
+                id="loading-quote"
+                class="text-gray-400 text-sm italic transition-opacity duration-500 ease-in-out"
+              ></p>
+            </div>
+            <img
+              id="output-image"
+              alt="生成的图片"
+              class="w-full rounded-lg hidden"
+            />
+             <video
+              id="output-video"
+              alt="生成的视频"
+              class="w-full rounded-lg hidden"
+              controls
+              autoplay
+              loop
+              muted
+            ></video>
+            <!-- Media Actions -->
+            <div
+              id="media-actions"
+              class="hidden absolute top-3 right-3 flex items-center space-x-2"
+            >
+              <button
+                id="regenerate-media-button"
+                title="使用相同设置重新生成"
+                class="p-2 bg-black bg-opacity-60 rounded-full text-white hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white transition-all"
+              >
+                <svg
+                  class="h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 4v5h5M20 20v-5h-5M4 4l1.5 1.5A9 9 0 0120.5 15M20 20l-1.5-1.5A9 9 0 003.5 9"
+                  ></path>
+                </svg>
+              </button>
+              <button
+                id="download-button"
+                title="下载"
+                class="p-2 bg-black bg-opacity-60 rounded-full text-white hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white transition-all"
+              >
+                <svg
+                  class="h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  ></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p id="status" class="text-center text-gray-400 min-h-[24px]">请上传图片以开始。</p>
+      </div>
+    </div>
+
+    <script type="module" src="index.tsx"></script>
+
+    <div id="banner-root"></div>
+    <script type="text/babel" data-type="module">
+      import React, { useState, useEffect } from 'react';
+      import { createRoot } from 'react-dom/client';
+      import { motion, AnimatePresence } from 'framer-motion';
+
+      const REMIX_IDEAS = [
+        "生成电影海报。",
+        "将产品植入可视化。",
+        "重新构想您的角色设计。",
+        "创建新场景。",
+        "预览不同的镜头。",
+      ];
+
+      const CloseIcon = () => (
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      );
+
+      const Banner = () => {
+          const [isVisible, setIsVisible] = useState(true);
+          const [index, setIndex] = useState(0);
+
+          useEffect(() => {
+              const intervalId = setInterval(() => {
+                  setIndex(prevIndex => (prevIndex + 1) % REMIX_IDEAS.length);
+              }, 3500);
+
+              return () => clearInterval(intervalId);
+          }, []);
+
+          const handleSelectKeyClick = async (e) => {
+            e.preventDefault();
+            if (window.aistudio?.openSelectKey) {
+              await window.aistudio.openSelectKey();
+            } else {
+              console.log('window.aistudio.openSelectKey() not available.');
+              alert('此环境中无法选择 API 密钥。');
+            }
+          };
+          
+          if (!isVisible) {
+            return null;
+          }
+
+          return (
+              <header className="app-banner">
+                  <div className="app-banner-content">
+                      <div className="banner-left">
+                          <p>由 Gemini API 强力驱动</p>
+                      </div>
+                      <div className="remix-ideas">
+                          <span className="remix-prompt">改编此应用...</span>
+                          <div className="remix-text-container">
+                              <AnimatePresence mode="wait">
+                                  <motion.span
+                                      key={index}
+                                      initial={{ opacity: 0, y: 10 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      exit={{ opacity: 0, y: -10 }}
+                                      transition={{ duration: 0.4, ease: "easeInOut" }}
+                                      className="remix-text"
+                                  >
+                                      {REMIX_IDEAS[index]}
+                                  </motion.span>
+                              </AnimatePresence>
+                          </div>
+                      </div>
+                      <div className="banner-right">
+                          <div className="banner-buttons">
+                              <a
+                                  href="https://aistudio.google.com/apps"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="banner-button button-gemini-chat"
+                              >
+                                  AI Studio 上的应用
+                              </a>
+                              <a
+                                  href="#"
+                                  onClick={handleSelectKeyClick}
+                                  className="banner-button button-ai-studio"
+                              >
+                                  添加您的 API 密钥
+                              </a>
+                          </div>
+                          <button
+                            className="close-button"
+                            onClick={() => setIsVisible(false)}
+                            aria-label="关闭通知">
+                            <CloseIcon />
+                          </button>
+                      </div>
+                  </div>
+              </header>
+          );
+      };
+
+      const container = document.getElementById('banner-root');
+      if (container) {
+        const root = createRoot(container);
+        root.render(<React.StrictMode><Banner /></React.StrictMode>);
+      }
+    </script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
