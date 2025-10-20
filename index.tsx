@@ -240,9 +240,6 @@ function setControlsDisabled(disabled: boolean) {
 
 // --- Firebase Initialization and Functions ---
 
-// Fix: Switched to a mixed v9/compat Firebase initialization.
-// This uses the v9 modular API for Firestore and the v8 compat API for Authentication
-// to resolve the module import errors.
 function initializeFirebase(): { auth: Auth | null; db: Firestore | null } {
     if (!firebaseConfig.apiKey) {
         console.error("Firebase config is missing.");
@@ -259,7 +256,12 @@ function initializeFirebase(): { auth: Auth | null; db: Firestore | null } {
         const db = getFirestore(app);
         return { auth, db };
     } catch (e) {
-        console.error('Firebase initialization failed:', e);
+        const error = e as { code?: string; message: string };
+        console.error('Firebase initialization failed:', error);
+        if (error.code === 'auth/operation-not-supported-in-this-environment') {
+            statusEl.innerHTML = '登录功能在此环境不可用 (不支持本地文件访问)。<br/>请通过 Web 服务器 (如 GitHub Pages) 访问本应用以启用云同步。';
+            loginButton.style.display = 'none';
+        }
         return { auth: null, db: null };
     }
 }
@@ -302,7 +304,6 @@ async function checkProductHistory(imageHash: string) {
   }
 }
 
-// Fix: Updated to use Firebase v8 compat API for authentication.
 async function handleLogin(authInstance: Auth) {
   const provider = new firebase.auth.GoogleAuthProvider();
   try {
@@ -313,7 +314,6 @@ async function handleLogin(authInstance: Auth) {
   }
 }
 
-// Fix: Updated to use Firebase v8 compat API for authentication.
 async function handleLogout(authInstance: Auth) {
   try {
     await authInstance.signOut();
@@ -336,7 +336,10 @@ function updateUserUI(user: User | null) {
     loginButton.classList.remove('hidden');
     userProfileEl.classList.add('hidden');
     userProfileEl.classList.remove('flex');
-    statusEl.innerText = '请上传图片以开始。';
+    // Do not overwrite the specific error message if auth is unavailable
+    if (!statusEl.innerHTML.includes('不可用')) {
+       statusEl.innerText = '请上传图片以开始。';
+    }
   }
 }
 
@@ -1014,7 +1017,10 @@ function setupEventListeners() {
         });
     } else {
         loginButton.style.display = 'none';
-        showStatusError("无法初始化登录服务。");
+        // Do not overwrite the specific error message if auth is unavailable
+        if (!statusEl.innerHTML.includes('不可用')) {
+            showStatusError("无法初始化登录服务。");
+        }
     }
 }
 
